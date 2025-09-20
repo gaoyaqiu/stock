@@ -1,9 +1,12 @@
 # -*- coding:utf-8 -*-
 # !/usr/bin/env python
 
+import math
 import pandas as pd
 import requests
 import instock.core.tablestructure as tbs
+from instock.core.singleton_proxy import proxys
+
 
 __author__ = 'myh '
 __date__ = '2023/5/9 '
@@ -17,6 +20,8 @@ def stock_selection() -> pd.DataFrame:
     :rtype: pandas.DataFrame
     """
     cols = tbs.TABLE_CN_STOCK_SELECTION['columns']
+    page_size = 50
+    page_current = 1
     sty = ""  # 初始值 "SECUCODE,SECURITY_CODE,SECURITY_NAME_ABBR,CHANGE_RATE"
     for k in cols:
         sty = f"{sty},{cols[k]['map']}"
@@ -24,16 +29,29 @@ def stock_selection() -> pd.DataFrame:
     params = {
         "sty": sty[1:],
         "filter": "(MARKET+in+(\"上交所主板\",\"深交所主板\",\"深交所创业板\"))(NEW_PRICE>0)",
-        "p": 1,
-        "ps": 10000,
+        "p": page_current,
+        "ps": page_size,
         "source": "SELECT_SECURITIES",
         "client": "WEB"
     }
-    r = requests.get(url, params=params)
+
+    r = requests.get(url, proxies = proxys().get_proxies(), params=params)
     data_json = r.json()
     data = data_json["result"]["data"]
     if not data:
         return pd.DataFrame()
+
+    data_count = data_json["result"]["count"]
+    page_count = math.ceil(data_count/page_size)
+    while page_count > 1:
+        page_current = page_current + 1
+        params["p"] = page_current
+        r = requests.get(url, proxies = proxys().get_proxies(), params=params)
+        data_json = r.json()
+        _data = data_json["result"]["data"]
+        data.extend(_data)
+        page_count =page_count - 1
+
     temp_df = pd.DataFrame(data)
 
     mask = ~temp_df['CONCEPT'].isna()
@@ -63,17 +81,18 @@ def stock_selection_params():
         "type": "RPTA_PCNEW_WHOLE",
         "sty": "ALL",
         "p": 1,
-        "ps": 50000,
+        "ps": 1000,
         "source": "SELECT_SECURITIES",
         "client": "WEB"
     }
 
-    r = requests.get(url, params=params)
+    r = requests.get(url, proxies = proxys().get_proxies(), params=params)
     data_json = r.json()
-    zxzb = data_json["zxzb"]  # 指标
+    zxzb = data_json["result"]["data"]  # 指标
     print(zxzb)
 
 
 if __name__ == "__main__":
     stock_selection_df = stock_selection()
     print(stock_selection)
+    # stock_selection_params()
